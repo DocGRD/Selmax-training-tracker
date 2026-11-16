@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0d10">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tenths Clock">
+  <title>Tenths Clock</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+  <link rel="icon" href="icon-512.png" type="image/png" sizes="512x512">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0c0d10;
+      --fg: #f4f1ea;
+      --muted: #aaa59c;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    body {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding:
+        max(1.5rem, env(safe-area-inset-top))
+        max(1.25rem, env(safe-area-inset-right))
+        max(1.75rem, env(safe-area-inset-bottom))
+        max(1.25rem, env(safe-area-inset-left));
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-align: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    main { width: min(100%, 36rem); }
+    p { margin: 0; }
+    .date {
+      font-size: clamp(1.25rem, 5.2vw, 1.7rem);
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    .time {
+      margin-top: 0.45rem;
+      font-size: clamp(1.85rem, 8vw, 2.75rem);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+    }
+    .tenths {
+      margin-top: 0.55rem;
+      font-size: min(34vw, 24vh, 11rem);
+      font-weight: 700;
+      line-height: 0.86;
+      letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .next {
+      margin-top: 1.15rem;
+      font-size: clamp(0.95rem, 4vw, 1.15rem);
+      font-weight: 400;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="date" id="date"></p>
+    <p class="time" id="time"></p>
+    <p class="tenths" id="tenths"></p>
+    <p class="next" id="next"></p>
+  </main>
+  <script>
+    (function () {
+      var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      var dateEl = document.getElementById("date");
+      var timeEl = document.getElementById("time");
+      var tenthsEl = document.getElementById("tenths");
+      var nextEl = document.getElementById("next");
+      var shownSecond = -1;
+
+      function pad2(n) {
+        return (n < 10 ? "0" : "") + n;
+      }
+
+      function render(now) {
+        var hours = now.getHours();
+        var minutes = now.getMinutes();
+        var seconds = now.getSeconds();
+        var hour12 = hours % 12;
+        if (hour12 === 0) hour12 = 12;
+        var tenth = Math.floor(minutes / 6);
+        var elapsed = minutes * 60 + seconds;
+        var nextBoundary = (tenth + 1) * 6 * 60;
+        var remain = nextBoundary - elapsed;
+        var remainMin = Math.floor(remain / 60);
+        var remainSec = remain % 60;
+
+        dateEl.textContent = DAYS[now.getDay()] + " " + MONTHS[now.getMonth()] + " " + now.getDate();
+        timeEl.textContent = hour12 + ":" + pad2(minutes) + ":" + pad2(seconds) + " " + (hours < 12 ? "AM" : "PM");
+        tenthsEl.textContent = hours + "." + tenth;
+        nextEl.textContent = "next tenth in " + remainMin + ":" + pad2(remainSec);
+      }
+
+      function tick() {
+        var now = new Date();
+        var second = now.getSeconds();
+        if (second !== shownSecond) {
+          shownSecond = second;
+          render(now);
+        }
+        var wait = 1020 - (Date.now() % 1000);
+        if (wait < 40) wait += 1000;
+        window.setTimeout(tick, wait);
+      }
+
+      var wakeLock = null;
+      var wakePending = false;
+      function stayAwake() {
+        try {
+          if (!navigator.wakeLock || wakeLock || wakePending) return;
+          wakePending = true;
+          navigator.wakeLock.request("screen").then(function (sentinel) {
+            wakeLock = sentinel;
+            wakePending = false;
+            sentinel.addEventListener("release", function () {
+              wakeLock = null;
+            });
+          }).catch(function () {
+            wakePending = false;
+          });
+        } catch (err) {}
+      }
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") {
+          shownSecond = -1;
+          stayAwake();
+        }
+      });
+      window.addEventListener("pointerdown", function () {
+        stayAwake();
+      });
+
+      tick();
+      stayAwake();
+    })();
+  </script>
+</body>
+</html>
