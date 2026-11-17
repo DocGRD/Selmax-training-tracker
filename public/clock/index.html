@@ -35,9 +35,9 @@
       justify-content: center;
       overflow: hidden;
       padding:
-        max(1.5rem, env(safe-area-inset-top))
+        max(1.25rem, env(safe-area-inset-top))
         max(1.25rem, env(safe-area-inset-right))
-        max(1.75rem, env(safe-area-inset-bottom))
+        max(1.5rem, env(safe-area-inset-bottom))
         max(1.25rem, env(safe-area-inset-left));
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
@@ -47,6 +47,36 @@
     }
     main { width: min(100%, 36rem); }
     p { margin: 0; }
+    .cycle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      width: min(100%, 22rem);
+      margin: 0 auto 1.35rem;
+    }
+    .cycle button {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 2px solid var(--fg);
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      font-size: clamp(1.15rem, 4.8vw, 1.45rem);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      min-height: 3.25rem;
+      padding: 0.7rem 0.4rem;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .cycle button[aria-pressed="true"] {
+      background: var(--fg);
+      color: var(--bg);
+    }
+    .cycle button:focus-visible {
+      outline: 3px solid #e24b3a;
+      outline-offset: 3px;
+    }
     .date {
       font-size: clamp(1.25rem, 5.2vw, 1.7rem);
       font-weight: 500;
@@ -54,23 +84,34 @@
       color: var(--muted);
     }
     .time {
-      margin-top: 0.45rem;
+      margin-top: 0.4rem;
       font-size: clamp(1.85rem, 8vw, 2.75rem);
       font-weight: 500;
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.01em;
     }
     .tenths {
-      margin-top: 0.55rem;
-      font-size: min(34vw, 24vh, 11rem);
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 0.12em;
+      margin-top: 0.45rem;
+      font-size: min(28vw, 20vh, 9.5rem);
       font-weight: 700;
       line-height: 0.86;
       letter-spacing: -0.04em;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
+    .tenths.plain { font-size: min(34vw, 24vh, 11rem); }
+    .tenths .suffix {
+      font-size: 0.32em;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .tenths .suffix[hidden] { display: none; }
     .next {
-      margin-top: 1.15rem;
+      margin-top: 1.05rem;
       font-size: clamp(0.95rem, 4vw, 1.15rem);
       font-weight: 400;
       color: var(--muted);
@@ -80,42 +121,68 @@
 </head>
 <body>
   <main>
+    <div class="cycle" role="group" aria-label="Hour cycle">
+      <button type="button" id="cycle-12" aria-pressed="true">12-hour</button>
+      <button type="button" id="cycle-24" aria-pressed="false">24-hour</button>
+    </div>
     <p class="date" id="date"></p>
     <p class="time" id="time"></p>
-    <p class="tenths" id="tenths"></p>
+    <p class="tenths" id="tenths"><span id="tenths-value"></span><span class="suffix" id="tenths-suffix" hidden></span></p>
     <p class="next" id="next"></p>
   </main>
+  <script src="clock-logic.js"></script>
   <script>
     (function () {
       var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      var STORAGE_KEY = "tenths-clock-hour-cycle";
+      var logic = window.TenthsClock;
       var dateEl = document.getElementById("date");
       var timeEl = document.getElementById("time");
       var tenthsEl = document.getElementById("tenths");
+      var tenthsValueEl = document.getElementById("tenths-value");
+      var tenthsSuffixEl = document.getElementById("tenths-suffix");
       var nextEl = document.getElementById("next");
+      var cycle12 = document.getElementById("cycle-12");
+      var cycle24 = document.getElementById("cycle-24");
       var shownSecond = -1;
+      var cycle = "12";
 
-      function pad2(n) {
-        return (n < 10 ? "0" : "") + n;
+      function readCycle() {
+        try {
+          var saved = localStorage.getItem(STORAGE_KEY);
+          if (saved === "12" || saved === "24") return saved;
+        } catch (err) {}
+        return "12";
+      }
+
+      function applyCycle(next, persist) {
+        cycle = next === "24" ? "24" : "12";
+        cycle12.setAttribute("aria-pressed", cycle === "12" ? "true" : "false");
+        cycle24.setAttribute("aria-pressed", cycle === "24" ? "true" : "false");
+        tenthsEl.classList.toggle("plain", cycle === "24");
+        if (persist) {
+          try { localStorage.setItem(STORAGE_KEY, cycle); } catch (err) {}
+        }
+        shownSecond = -1;
+        render(new Date());
       }
 
       function render(now) {
-        var hours = now.getHours();
-        var minutes = now.getMinutes();
-        var seconds = now.getSeconds();
-        var hour12 = hours % 12;
-        if (hour12 === 0) hour12 = 12;
-        var tenth = Math.floor(minutes / 6);
-        var elapsed = minutes * 60 + seconds;
-        var nextBoundary = (tenth + 1) * 6 * 60;
-        var remain = nextBoundary - elapsed;
-        var remainMin = Math.floor(remain / 60);
-        var remainSec = remain % 60;
-
+        var text = logic.formatTenths(now, cycle);
+        var split = text.lastIndexOf(" ");
         dateEl.textContent = DAYS[now.getDay()] + " " + MONTHS[now.getMonth()] + " " + now.getDate();
-        timeEl.textContent = hour12 + ":" + pad2(minutes) + ":" + pad2(seconds) + " " + (hours < 12 ? "AM" : "PM");
-        tenthsEl.textContent = hours + "." + tenth;
-        nextEl.textContent = "next tenth in " + remainMin + ":" + pad2(remainSec);
+        timeEl.textContent = logic.formatClock(now, cycle);
+        if (split === -1) {
+          tenthsValueEl.textContent = text;
+          tenthsSuffixEl.textContent = "";
+          tenthsSuffixEl.hidden = true;
+        } else {
+          tenthsValueEl.textContent = text.slice(0, split);
+          tenthsSuffixEl.textContent = text.slice(split + 1);
+          tenthsSuffixEl.hidden = false;
+        }
+        nextEl.textContent = logic.formatNextTenth(now);
       }
 
       function tick() {
@@ -148,6 +215,9 @@
         } catch (err) {}
       }
 
+      cycle12.addEventListener("click", function () { applyCycle("12", true); });
+      cycle24.addEventListener("click", function () { applyCycle("24", true); });
+
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "visible") {
           shownSecond = -1;
@@ -158,6 +228,7 @@
         stayAwake();
       });
 
+      applyCycle(readCycle(), false);
       tick();
       stayAwake();
     })();
