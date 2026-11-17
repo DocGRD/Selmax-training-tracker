@@ -69,6 +69,16 @@
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
+    .meridiem {
+      display: block;
+      margin-top: 0.42rem;
+      font-size: clamp(1.35rem, 6vw, 2.15rem);
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      line-height: 1;
+      color: var(--fg);
+    }
+    .meridiem[hidden] { display: none; }
     .next {
       margin-top: 1.15rem;
       font-size: clamp(0.95rem, 4vw, 1.15rem);
@@ -76,27 +86,85 @@
       color: var(--muted);
       font-variant-numeric: tabular-nums;
     }
+    .cycle {
+      margin: 1.85rem auto 0;
+      display: flex;
+      width: min(100%, 20rem);
+      padding: 0.3rem;
+      gap: 0.3rem;
+      border-radius: 999px;
+      background: rgba(244, 241, 234, 0.06);
+      border: 1px solid rgba(244, 241, 234, 0.16);
+    }
+    .cycle button {
+      appearance: none;
+      -webkit-appearance: none;
+      flex: 1 1 0;
+      border: 0;
+      margin: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      min-height: 3.25rem;
+      padding: 0.85rem 0.75rem;
+      border-radius: 999px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cycle button[aria-pressed="true"] {
+      background: var(--fg);
+      color: var(--bg);
+    }
+    .cycle button:focus-visible {
+      outline: 2px solid var(--fg);
+      outline-offset: 3px;
+    }
   </style>
 </head>
 <body>
   <main>
     <p class="date" id="date"></p>
     <p class="time" id="time"></p>
-    <p class="tenths" id="tenths"></p>
+    <p class="tenths" id="tenths"><span id="tenths-value"></span><span class="meridiem" id="meridiem" hidden></span></p>
     <p class="next" id="next"></p>
+    <div class="cycle" role="group" aria-label="Hour format">
+      <button type="button" id="cycle-12" aria-pressed="false">12-hour</button>
+      <button type="button" id="cycle-24" aria-pressed="true">24-hour</button>
+    </div>
   </main>
+  <script src="tenths.js"></script>
   <script>
     (function () {
       var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      var STORAGE_KEY = "tenths-clock-hour-cycle";
       var dateEl = document.getElementById("date");
       var timeEl = document.getElementById("time");
       var tenthsEl = document.getElementById("tenths");
+      var valueEl = document.getElementById("tenths-value");
+      var meridiemEl = document.getElementById("meridiem");
       var nextEl = document.getElementById("next");
+      var cycle12El = document.getElementById("cycle-12");
+      var cycle24El = document.getElementById("cycle-24");
       var shownSecond = -1;
+      var hourCycle = "24";
+
+      try {
+        var stored = localStorage.getItem(STORAGE_KEY);
+        if (stored === "12" || stored === "24") hourCycle = stored;
+      } catch (err) {}
 
       function pad2(n) {
         return (n < 10 ? "0" : "") + n;
+      }
+
+      function syncCycleButtons() {
+        cycle12El.setAttribute("aria-pressed", hourCycle === "12" ? "true" : "false");
+        cycle24El.setAttribute("aria-pressed", hourCycle === "24" ? "true" : "false");
       }
 
       function render(now) {
@@ -105,16 +173,21 @@
         var seconds = now.getSeconds();
         var hour12 = hours % 12;
         if (hour12 === 0) hour12 = 12;
-        var tenth = Math.floor(minutes / 6);
-        var elapsed = minutes * 60 + seconds;
-        var nextBoundary = (tenth + 1) * 6 * 60;
-        var remain = nextBoundary - elapsed;
+        var reading = tenthsReading(hours, minutes, seconds, hourCycle);
+        var remain = reading.secondsToNext;
         var remainMin = Math.floor(remain / 60);
-        var remainSec = remain % 60;
+        var remainSec = Math.floor(remain % 60);
 
         dateEl.textContent = DAYS[now.getDay()] + " " + MONTHS[now.getMonth()] + " " + now.getDate();
         timeEl.textContent = hour12 + ":" + pad2(minutes) + ":" + pad2(seconds) + " " + (hours < 12 ? "AM" : "PM");
-        tenthsEl.textContent = hours + "." + tenth;
+        valueEl.textContent = (hourCycle === "12" ? reading.hour12 : reading.hour24) + "." + reading.tenth;
+        if (hourCycle === "12") {
+          meridiemEl.hidden = false;
+          meridiemEl.textContent = reading.meridiem;
+        } else {
+          meridiemEl.hidden = true;
+          meridiemEl.textContent = "";
+        }
         nextEl.textContent = "next tenth in " + remainMin + ":" + pad2(remainSec);
       }
 
@@ -129,6 +202,26 @@
         if (wait < 40) wait += 1000;
         window.setTimeout(tick, wait);
       }
+
+      function setCycle(cycle) {
+        if (cycle !== "12" && cycle !== "24") return;
+        hourCycle = cycle;
+        try {
+          localStorage.setItem(STORAGE_KEY, cycle);
+        } catch (err) {}
+        syncCycleButtons();
+        var now = new Date();
+        shownSecond = now.getSeconds();
+        render(now);
+      }
+
+      cycle12El.addEventListener("click", function () {
+        setCycle("12");
+      });
+      cycle24El.addEventListener("click", function () {
+        setCycle("24");
+      });
+      syncCycleButtons();
 
       var wakeLock = null;
       var wakePending = false;
