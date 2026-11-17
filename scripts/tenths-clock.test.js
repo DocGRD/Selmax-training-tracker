@@ -2,7 +2,6 @@ const assert = require("assert");
 const {
   formatTenths,
   formatClock,
-  formatNextTenth,
 } = require("../public/clock/clock-logic.js");
 
 function at(hour, minute, second) {
@@ -66,11 +65,6 @@ check("24-hour clock is 00–23", formatClock(at(6, 2, 59), "24"), "06:02:59");
 check("24-hour midnight is 00", formatClock(at(0, 5, 9), "24"), "00:05:09");
 check("24-hour 23", formatClock(at(23, 57, 0), "24"), "23:57:00");
 check("clock line does not round 12:57 PM", formatClock(at(12, 57, 0), "12"), "12:57:00 PM");
-
-check("next tenth just before a boundary", formatNextTenth(at(6, 2, 59)), "next tenth in 0:01");
-check("next tenth on a boundary is six minutes", formatNextTenth(at(6, 3, 0)), "next tenth in 6:00");
-check("next tenth after the roll is six minutes", formatNextTenth(at(6, 57, 0)), "next tenth in 6:00");
-check("next tenth at the top of the hour", formatNextTenth(at(6, 0, 0)), "next tenth in 3:00");
 
 for (let hour = 0; hour < 24; hour += 1) {
   for (let minute = 0; minute < 60; minute += 1) {

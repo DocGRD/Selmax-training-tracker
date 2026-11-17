@@ -44,32 +44,9 @@
     return hour12 + ":" + pad2(minutes) + ":" + pad2(seconds) + " " + (hours < 12 ? "AM" : "PM");
   }
 
-  // Seconds until the displayed tenth changes (the next :03, :09, …, :57, or :03 next hour).
-  function secondsUntilNextTenth(date) {
-    var into = date.getMinutes() * 60 + date.getSeconds();
-    var next = null;
-    var k;
-    for (k = 0; k < 10; k++) {
-      var boundary = 180 + 360 * k;
-      if (boundary > into) {
-        next = boundary;
-        break;
-      }
-    }
-    if (next === null) next = 3600 + 180;
-    return next - into;
-  }
-
-  function formatNextTenth(date) {
-    var remain = secondsUntilNextTenth(date);
-    return "next tenth in " + Math.floor(remain / 60) + ":" + pad2(remain % 60);
-  }
-
   return {
     roundHourTenth: roundHourTenth,
     formatTenths: formatTenths,
     formatClock: formatClock,
-    secondsUntilNextTenth: secondsUntilNextTenth,
-    formatNextTenth: formatNextTenth,
   };
 });
